@@ -58,6 +58,7 @@ import io.nekohasekai.sagernet.bg.SagerConnection
 import io.nekohasekai.sagernet.database.*
 import io.nekohasekai.sagernet.database.preference.OnPreferenceDataStoreChangeListener
 import io.nekohasekai.sagernet.databinding.LayoutMainBinding
+import io.nekohasekai.sagernet.dnschain.DnsChainService
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.Alerts
 import io.nekohasekai.sagernet.fmt.PluginEntry
@@ -577,6 +578,9 @@ class MainActivity : ThemedActivity(),
 
     override fun onStart() {
         super.onStart()
+        if (DataStore.dnsChainEnabled && !DnsChainService.running) {
+            DnsChainService.start(this, restart = false)
+        }
         connection.bandwidthTimeout = 1000
         GroupManager.userInterface = userInterface
     }

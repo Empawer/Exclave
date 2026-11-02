@@ -259,6 +259,20 @@
             android:taskAffinity="io.nekohasekai.sagernet.ui.StunActivity"
             android:parentActivityName="io.nekohasekai.sagernet.ui.MainActivity" />
         <activity
+            android:name="io.nekohasekai.sagernet.ui.DnsChainActivity"
+            android:label="@string/dns_chain" />
+
+        <service
+            android:name="io.nekohasekai.sagernet.dnschain.DnsChainService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="dns_chain" />
+        </service>
+
+        <activity
             android:name="io.nekohasekai.sagernet.ui.ProbeCertActivity"
             android:launchMode="singleTask"
             android:taskAffinity="io.nekohasekai.sagernet.ui.ProbeCertActivity"

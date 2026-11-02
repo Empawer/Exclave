@@ -259,6 +259,12 @@
             app:icon="@drawable/ic_baseline_texture_24"
             app:key="enableFragmentForDirect"
             app:title="@string/enable_fragment_for_direct" />
+        <io.nekohasekai.sagernet.widget.DnsChainPreference
+            app:icon="@drawable/ic_action_dns"
+            app:key="dnsChainEnabled"
+            app:singleLineTitle="false"
+            app:summary="@string/dns_chain_sum"
+            app:title="@string/dns_chain" />
         <SwitchPreference
             app:defaultValue="true"
             app:icon="@drawable/ic_baseline_cached"

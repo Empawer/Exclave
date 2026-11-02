@@ -587,4 +587,17 @@
     <string name="chrome_parrot_omit_max_datagram_frame_size_datagram_warning">این گزینه برای هماهنگی با رفتار کروم غیرفعال شده است.</string>
     <string name="option_globally_enabled">این گزینه به صورت سراسری فعال شده و مقدار آن حذف خواهد شد.</string>
     <string name="snell_obfs_uri">نشانی پنهان‌سازی</string>
+
+    <!-- DNS Chain -->
+    <string name="dns_chain_sum">پروکسی محلی SOCKS5 با DNS روی HTTPS و قطعه‌قطعه‌سازی TLS. برای تنظیم لمس کنید.</string>
+    <string name="dns_chain_description">یک پروکسی محلی SOCKS5 (HTTP CONNECT هم کار می‌کند) که دامنه‌ها را با DNS روی HTTPS حل می‌کند و Client Hello مربوط به TLS را قطعه‌قطعه می‌کند. با یک پروکسی SOCKS به آدرس %1$s به آن وصل شوید.</string>
+    <string name="dns_chain_doh_hint">سرورهای DoH (هر لینک در یک خط)</string>
+    <string name="dns_chain_doh_help">هر تعداد لینک DNS روی HTTPS که می‌خواهید جای‌گذاری کنید. درخواست همزمان به همه می‌رود و اولین پاسخ استفاده می‌شود. اگر خالی بماند DNS سیستم استفاده می‌شود. تنظیمات فرگمنت از فایل setting.ini داخل برنامه خوانده می‌شود.</string>
+    <string name="dns_chain_save">ذخیره</string>
+    <string name="dns_chain_reset">بازگشت به پیش‌فرض</string>
+    <string name="dns_chain_saved">ذخیره شد</string>
+    <string name="dns_chain_status_running">در حال اجرا روی %1$s</string>
+    <string name="dns_chain_status_stopped">متوقف است. DNS Chain را از تنظیمات روشن کنید.</string>
+    <string name="dns_chain_notification">SOCKS5 %1$s</string>
+    <string name="dns_chain_start_failed">DNS Chain شروع نشد: %1$s</string>
 </resources>

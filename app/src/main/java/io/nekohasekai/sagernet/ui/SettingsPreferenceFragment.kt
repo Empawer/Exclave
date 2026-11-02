@@ -44,6 +44,7 @@ import io.nekohasekai.sagernet.*
 import io.nekohasekai.sagernet.Key.MODE_VPN
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.preference.EditTextPreferenceModifiers
+import io.nekohasekai.sagernet.dnschain.DnsChainService
 import io.nekohasekai.sagernet.ktx.*
 import io.nekohasekai.sagernet.ui.profile.ProfileSettingsActivity
 import io.nekohasekai.sagernet.utils.PackageCache
@@ -57,6 +58,7 @@ import java.util.Locale
 class SettingsPreferenceFragment : PreferenceFragmentCompat() {
 
     private lateinit var isProxyApps: SwitchPreference
+    private var dnsChainPreference: SwitchPreference? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -308,6 +310,20 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
                         .setPositiveButton(android.R.string.ok, null)
                         .show()
                 }
+            }
+            true
+        }
+
+        // DNS Chain
+        dnsChainPreference = findPreference(Key.DNS_CHAIN_ENABLED)
+        dnsChainPreference?.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as Boolean
+            // the preference persists after this listener returns; the service needs the value now
+            DataStore.dnsChainEnabled = enabled
+            if (enabled) {
+                DnsChainService.start(requireContext())
+            } else {
+                DnsChainService.stop(requireContext())
             }
             true
         }
@@ -625,6 +641,7 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         if (::isProxyApps.isInitialized) {
             isProxyApps.isChecked = DataStore.proxyApps
         }
+        dnsChainPreference?.isChecked = DataStore.dnsChainEnabled
     }
 
 }

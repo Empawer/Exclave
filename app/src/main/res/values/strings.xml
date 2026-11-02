@@ -631,4 +631,18 @@
     <string name="naiveproxy_idle_timeout">Idle timeout (s)</string>
     <string name="uri_template">URI Template</string>
     <string name="action_masque" translatable="false">MASQUE</string>
+
+    <!-- DNS Chain -->
+    <string name="dns_chain" translatable="false">DNS Chain</string>
+    <string name="dns_chain_sum">Local SOCKS5 proxy with DNS over HTTPS and TLS fragmentation. Tap to configure.</string>
+    <string name="dns_chain_description">A local SOCKS5 proxy (HTTP CONNECT also works) that resolves domains through DNS over HTTPS and fragments the TLS Client Hello. Connect to it with a SOCKS proxy at %1$s.</string>
+    <string name="dns_chain_doh_hint">DoH servers (one link per line)</string>
+    <string name="dns_chain_doh_help">Paste as many DNS over HTTPS links as you like. All of them are asked at once and the first answer wins. Leave empty to use the system DNS. Fragment settings are read from setting.ini inside the app.</string>
+    <string name="dns_chain_save">Save</string>
+    <string name="dns_chain_reset">Reset to default</string>
+    <string name="dns_chain_saved">Saved</string>
+    <string name="dns_chain_status_running">Running on %1$s</string>
+    <string name="dns_chain_status_stopped">Stopped. Turn on DNS Chain in Settings.</string>
+    <string name="dns_chain_notification">SOCKS5 %1$s</string>
+    <string name="dns_chain_start_failed">DNS Chain could not start: %1$s</string>
 </resources>
