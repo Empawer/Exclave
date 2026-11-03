@@ -265,6 +265,7 @@
         <service
             android:name="io.nekohasekai.sagernet.dnschain.DnsChainService"
             android:exported="false"
+            android:process=":bg"
             android:foregroundServiceType="specialUse">
 
             <property

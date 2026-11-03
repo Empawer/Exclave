@@ -13,6 +13,9 @@ import io.nekohasekai.sagernet.databinding.LayoutDnsChainBinding
 import io.nekohasekai.sagernet.dnschain.DnsChainConfig
 import io.nekohasekai.sagernet.dnschain.DnsChainService
 import io.nekohasekai.sagernet.dnschain.DnsChainSettings
+import java.net.InetSocketAddress
+import java.net.Socket
+import kotlin.concurrent.thread
 
 class DnsChainActivity : ThemedActivity() {
 
@@ -64,12 +67,24 @@ class DnsChainActivity : ThemedActivity() {
 
         if (savedInstanceState == null) {
             binding.dohInput.setText(DnsChainSettings.dohText(ini))
+            binding.userInput.setText(DataStore.dnsChainUser)
+            binding.passInput.setText(DataStore.dnsChainPass)
+            binding.autoCloseSwitch.isChecked = DataStore.dnsChainAutoClose
+            binding.idleInput.setText(DataStore.dnsChainIdleSeconds.toString())
         }
+        binding.autoCloseSwitch.setOnCheckedChangeListener { _, checked ->
+            binding.idleLayout.isEnabled = checked
+        }
+        binding.idleLayout.isEnabled = binding.autoCloseSwitch.isChecked
 
         binding.dnsChainSave.setOnClickListener { save() }
         binding.dnsChainReset.setOnClickListener {
-            // back to the DoH list written in setting.ini
+            // back to the DoH list written in setting.ini and the default login
             binding.dohInput.setText(ini?.dohServers?.joinToString("\n").orEmpty())
+            binding.userInput.setText("admin")
+            binding.passInput.setText("admin")
+            binding.autoCloseSwitch.isChecked = true
+            binding.idleInput.setText("60")
         }
     }
 
@@ -78,36 +93,76 @@ class DnsChainActivity : ThemedActivity() {
         updateStatus()
     }
 
+    /** Asks the real thing: is something listening on the proxy address right now? */
     private fun updateStatus() {
         val error = iniError
-        binding.dnsChainStatus.text = when {
-            error != null -> error
-            DnsChainService.running -> getString(R.string.dns_chain_status_running, address)
-            else -> getString(R.string.dns_chain_status_stopped)
+        if (error != null) {
+            binding.dnsChainStatus.text = error
+            return
         }
+        val config = ini ?: return
+        val host = config.listenIp
+        val port = config.listenPort
+        thread(isDaemon = true) {
+            val up = try {
+                Socket().use { it.connect(InetSocketAddress(host, port), 400) }
+                true
+            } catch (e: Exception) {
+                false
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                binding.dnsChainStatus.text = if (up) {
+                    getString(R.string.dns_chain_status_running, address)
+                } else {
+                    getString(R.string.dns_chain_status_stopped)
+                }
+            }
+        }
+    }
+
+    private fun showError(message: String?) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.error_title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun save() {
         val doh = binding.dohInput.text?.toString().orEmpty().trim()
+        val user = binding.userInput.text?.toString().orEmpty()
+        val pass = binding.passInput.text?.toString().orEmpty()
+        val autoClose = binding.autoCloseSwitch.isChecked
+        val idleText = binding.idleInput.text?.toString().orEmpty().trim()
+        val idleSeconds = idleText.toIntOrNull()
 
         // validate before saving so a typo can never break the running proxy
         try {
             DnsChainConfig.parseDohText(doh)
         } catch (e: DnsChainConfig.ConfigException) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.error_title)
-                .setMessage(e.message)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
+            showError(e.message)
+            return
+        }
+        if (!DnsChainSettings.checkLogin(user, pass)) {
+            showError(getString(R.string.dns_chain_login_invalid))
+            return
+        }
+
+        // the seconds only matter while "close after idle" is on
+        if (autoClose && (idleSeconds == null || idleSeconds < 1 || idleSeconds > DnsChainSettings.MAX_IDLE_SECONDS)) {
+            showError(getString(R.string.dns_chain_idle_invalid, DnsChainSettings.MAX_IDLE_SECONDS))
             return
         }
 
         DnsChainSettings.saveDoh(doh)
-        if (DataStore.dnsChainEnabled) {
-            DnsChainService.start(this) // restart with the new settings
+        DnsChainSettings.saveLogin(user, pass)
+        DataStore.dnsChainAutoClose = autoClose
+        if (idleSeconds != null && idleSeconds in 1..DnsChainSettings.MAX_IDLE_SECONDS) {
+            DataStore.dnsChainIdleSeconds = idleSeconds
         }
+        DnsChainService.reload(this) // applies the new settings if the proxy is up right now
         Toast.makeText(this, R.string.dns_chain_saved, Toast.LENGTH_SHORT).show()
-        binding.dnsChainStatus.postDelayed({ updateStatus() }, 800)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {

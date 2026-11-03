@@ -191,6 +191,10 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var enableFragmentForDirect by configurationStore.boolean(Key.ENABLE_FRAGMENT_FOR_DIRECT)
     var fragmentMethod by configurationStore.stringToInt(Key.FRAGMENT_METHOD)
     var dnsChainEnabled by configurationStore.boolean(Key.DNS_CHAIN_ENABLED)
+    var dnsChainUser by configurationStore.string(Key.DNS_CHAIN_USER) { "admin" }
+    var dnsChainPass by configurationStore.string(Key.DNS_CHAIN_PASS) { "admin" }
+    var dnsChainAutoClose by configurationStore.boolean(Key.DNS_CHAIN_AUTO_CLOSE) { true }
+    var dnsChainIdleSeconds by configurationStore.stringToInt(Key.DNS_CHAIN_IDLE_SECONDS) { 60 }
     var realityDisableX25519Mlkem768 by configurationStore.boolean(Key.REALITY_DISABLE_X25519MLKEM768)
     var hysteria2OmitMaxDatagramFrameSize by configurationStore.boolean(Key.HYSTERIA2_OMIT_MAX_DATAGRAM_FRAME_SIZE)
     var grpcServiceNameCompat by configurationStore.boolean(Key.GRPC_SERVICE_NAME_COMPAT)

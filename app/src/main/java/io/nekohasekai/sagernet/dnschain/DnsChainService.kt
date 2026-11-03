@@ -17,51 +17,114 @@ import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ui.DnsChainActivity
+import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * Keeps the DNS Chain proxy (SOCKS5 / HTTP CONNECT + DoH + TLS fragmentation)
- * alive on 127.0.0.1:40445 while the switch in Settings is on.
+ * Hosts the DNS Chain proxy (SOCKS5 / HTTP CONNECT + DoH + TLS fragmentation).
+ *
+ * Runs in the ":bg" process, next to the VPN / proxy service, and follows its life cycle:
+ *  - the switch in Settings only allows DNS Chain ("master switch");
+ *  - the local port opens when a profile is started (BaseService calls [configStarted]);
+ *  - when the profile stops, the port stays open for the configured seconds (default 60) and then
+ *    closes, unless "close after idle" is turned off in the DNS Chain page (then it stays open);
+ *  - starting a profile again (also a different one) cancels the countdown and reuses the
+ *    same, already open port;
+ *  - while a profile is running the port is never closed by the countdown.
  */
 class DnsChainService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "dns-chain"
         private const val NOTIFICATION_ID = 40445
-        private const val EXTRA_RESTART = "restart"
+        private const val ACTION_ENSURE = "io.nekohasekai.sagernet.dnschain.ENSURE"
+        private const val ACTION_RELOAD = "io.nekohasekai.sagernet.dnschain.RELOAD"
+
+        /** True while a profile is connecting or connected. Only meaningful inside ":bg". */
+        @Volatile
+        private var configRunning = false
 
         @Volatile
-        var running = false
-            private set
+        private var instance: DnsChainService? = null
 
-        /**
-         * @param restart true = (re)load the saved settings even if already running;
-         *                false = only start when not running yet.
-         */
-        fun start(context: Context, restart: Boolean = true) {
-            val intent = Intent(context, DnsChainService::class.java).putExtra(EXTRA_RESTART, restart)
-            try {
-                ContextCompat.startForegroundService(context, intent)
-            } catch (e: Exception) {
-                Logs.w(e)
+        /** BaseService (":bg"): a profile is starting. */
+        fun configStarted(context: Context) {
+            configRunning = true
+            instance?.cancelIdleStop()
+            if (DataStore.dnsChainEnabled) {
+                launch(context, ACTION_ENSURE)
             }
         }
 
-        fun stop(context: Context) {
+        /** BaseService (":bg"): the profile has stopped. */
+        fun configStopped() {
+            configRunning = false
+            instance?.scheduleIdleStop()
+        }
+
+        /**
+         * Settings: the switch was turned on. Opens the port right away if a profile is running,
+         * or if the port is set to stay open ("close after idle" is off).
+         */
+        fun onSwitchedOn(context: Context) {
+            if (DataStore.startedProfile > 0L || !DataStore.dnsChainAutoClose) {
+                launch(context, ACTION_ENSURE)
+            }
+        }
+
+        /** Settings: the switch was turned off. Closes the port immediately. */
+        fun onSwitchedOff(context: Context) {
             try {
                 context.stopService(Intent(context, DnsChainService::class.java))
             } catch (e: Exception) {
                 Logs.w(e)
             }
         }
+
+        /** DNS Chain page: DoH list / login changed. Applies them if the proxy is currently up. */
+        fun reload(context: Context) {
+            try {
+                context.startService(
+                    Intent(context, DnsChainService::class.java).setAction(ACTION_RELOAD)
+                )
+            } catch (e: Exception) {
+                Logs.w(e)
+            }
+        }
+
+        private fun launch(context: Context, action: String) {
+            val intent = Intent(context, DnsChainService::class.java).setAction(action)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                // the profile service keeps the process alive anyway
+                try {
+                    context.startService(intent)
+                } catch (e2: Exception) {
+                    Logs.w(e2)
+                }
+            }
+        }
     }
 
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val idleStop = Runnable { onIdleTimeout() }
+    private val lock = Any()
 
-    // only touched from the worker thread
+    // guarded by lock
     private var proxy: DnsChainProxy? = null
+
+    @Volatile
+    private var destroyed = false
+
+    @Volatile
+    private var lastStartId = 0
+
+    // login / DoH list the running proxy was started with (guarded by lock)
+    private var appliedSignature: String? = null
+    private var foregroundStarted = false
 
     private val logger = DnsChainProxy.Logger { level, message ->
         when (level) {
@@ -74,67 +137,110 @@ class DnsChainService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // must be called quickly after startForegroundService()
-        try {
-            NotificationManagerCompat.from(this).createNotificationChannel(
-                NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                    .setName(getString(R.string.dns_chain))
-                    .build()
-            )
-            startForeground(NOTIFICATION_ID, buildNotification())
-        } catch (e: Exception) {
-            Logs.w(e)
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
-        // intent == null: the system restarted us after the process was killed
-        if (intent == null && !DataStore.dnsChainEnabled) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        val restart = intent?.getBooleanExtra(EXTRA_RESTART, true) ?: false
-        try {
-            worker.execute { applyConfig(restart) }
-        } catch (e: Exception) {
-            Logs.w(e)
-        }
-        return START_STICKY
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
     }
 
-    private fun applyConfig(restart: Boolean) {
-        if (!restart && proxy?.isRunning == true) return
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
+        when (intent?.action) {
+            ACTION_ENSURE -> {
+                enterForeground()
+                post { ensureProxy() }
+            }
+            ACTION_RELOAD -> post { reloadProxy() }
+            else -> stopSelf(startId)
+        }
+        // when the process dies the profile dies with it, so there is nothing to restore
+        return START_NOT_STICKY
+    }
 
-        proxy?.stop()
-        proxy = null
-        running = false
+    private fun post(task: () -> Unit) {
+        try {
+            worker.execute { task() }
+        } catch (e: Exception) {
+            Logs.w(e)
+        }
+    }
 
+    // ---- proxy ----
+
+    private fun isProxyRunning(): Boolean = synchronized(lock) { proxy?.isRunning == true }
+
+    private fun ensureProxy() {
+        if (!DataStore.dnsChainEnabled) { // switched off in the meantime
+            mainHandler.post { stopSelf(lastStartId) }
+            return
+        }
+        if (!isProxyRunning() && !startProxy()) return
+        scheduleIdleStop() // does nothing while a profile is running
+    }
+
+    private fun reloadProxy() {
+        if (!isProxyRunning()) {
+            if (DataStore.dnsChainEnabled && !DataStore.dnsChainAutoClose) {
+                // "stay open" was just turned on: open the port now
+                mainHandler.post { enterForeground() }
+                if (startProxy()) scheduleIdleStop()
+            } else { // nothing is up; this instance was only started for the reload
+                mainHandler.post { stopSelf(lastStartId) }
+            }
+            return
+        }
+        val changed = synchronized(lock) { appliedSignature != DnsChainSettings.signature() }
+        if (changed) { // new DoH list or login
+            synchronized(lock) {
+                proxy?.stop()
+                proxy = null
+            }
+            startProxy()
+        }
+        scheduleIdleStop() // the countdown settings may have changed
+    }
+
+    /** Starts the proxy with the saved settings. Returns false (and reports) on failure. */
+    private fun startProxy(): Boolean {
         val config = try {
             DnsChainSettings.buildConfig(this)
         } catch (e: DnsChainConfig.ConfigException) {
             fail(e.message ?: "invalid settings")
-            return
+            return false
         } catch (e: Exception) {
             fail("cannot read ${DnsChainConfig.INI_ASSET}: ${e.message}")
-            return
+            return false
         }
 
-        val p = DnsChainProxy(config, logger)
-        try {
-            p.start()
-        } catch (e: Exception) {
-            p.stop()
-            fail(e.message ?: e.javaClass.simpleName)
-            return
+        var lastError: Exception? = null
+        for (attempt in 1..4) { // the port may still be released by a proxy that was just stopped
+            val p = DnsChainProxy(config, logger)
+            try {
+                p.start()
+                synchronized(lock) {
+                    if (destroyed) {
+                        p.stop()
+                        return false
+                    }
+                    proxy = p
+                    appliedSignature = DnsChainSettings.signature()
+                }
+                return true
+            } catch (e: IOException) {
+                p.stop()
+                lastError = e
+                try {
+                    Thread.sleep(300)
+                } catch (ie: InterruptedException) {
+                    return false
+                }
+            }
         }
-        proxy = p
-        running = true
+        fail(lastError?.message ?: "cannot open the local port")
+        return false
     }
 
     private fun fail(message: String) {
         Logs.e("DNS Chain: could not start: $message")
-        running = false
         DataStore.dnsChainEnabled = false
         mainHandler.post {
             Toast.makeText(
@@ -143,6 +249,45 @@ class DnsChainService : Service() {
                 Toast.LENGTH_LONG
             ).show()
             stopSelf()
+        }
+    }
+
+    // ---- 60 second countdown after the last profile stopped ----
+
+    fun cancelIdleStop() {
+        mainHandler.removeCallbacks(idleStop)
+    }
+
+    fun scheduleIdleStop() {
+        mainHandler.post {
+            mainHandler.removeCallbacks(idleStop)
+            if (!configRunning && DataStore.dnsChainAutoClose) {
+                val seconds = DataStore.dnsChainIdleSeconds.coerceIn(1, DnsChainSettings.MAX_IDLE_SECONDS)
+                mainHandler.postDelayed(idleStop, seconds * 1000L)
+            }
+        }
+    }
+
+    private fun onIdleTimeout() {
+        if (configRunning) return // a profile is running: never close the port
+        if (!DataStore.dnsChainAutoClose) return
+        stopSelf(lastStartId)     // no-op if a newer start request has arrived
+    }
+
+    // ---- notification ----
+
+    private fun enterForeground() {
+        if (foregroundStarted) return
+        try {
+            NotificationManagerCompat.from(this).createNotificationChannel(
+                NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+                    .setName(getString(R.string.dns_chain))
+                    .build()
+            )
+            startForeground(NOTIFICATION_ID, buildNotification())
+            foregroundStarted = true
+        } catch (e: Exception) {
+            Logs.w(e)
         }
     }
 
@@ -171,16 +316,14 @@ class DnsChainService : Service() {
     }
 
     override fun onDestroy() {
-        running = false
-        try {
-            worker.execute {
-                proxy?.stop()
-                proxy = null
-                running = false
-            }
-        } catch (ignored: Exception) {
+        mainHandler.removeCallbacks(idleStop)
+        if (instance === this) instance = null
+        worker.shutdownNow()
+        synchronized(lock) {
+            destroyed = true
+            proxy?.stop() // synchronous: the port is free when a new instance starts
+            proxy = null
         }
-        worker.shutdown()
         super.onDestroy()
     }
 }

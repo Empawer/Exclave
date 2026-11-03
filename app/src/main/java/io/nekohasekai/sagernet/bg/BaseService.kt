@@ -36,6 +36,7 @@ import io.nekohasekai.sagernet.aidl.TrafficStats
 import io.nekohasekai.sagernet.bg.proto.ProxyInstance
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.SagerDatabase
+import io.nekohasekai.sagernet.dnschain.DnsChainService
 import io.nekohasekai.sagernet.fmt.Alerts
 import io.nekohasekai.sagernet.fmt.TAG_SOCKS
 import io.nekohasekai.sagernet.ktx.*
@@ -419,6 +420,7 @@ class BaseService {
 
                 // change the state
                 data.changeState(State.Stopped, msg)
+                DnsChainService.configStopped()
                 DataStore.startedProfile = 0L
                 if (!keepState) DataStore.currentProfile = 0L
                 // stop the service if nothing has bound to it
@@ -487,6 +489,7 @@ class BaseService {
                 createNotification(profile.displayName())
             }
 
+            DnsChainService.configStarted(this as Context)
             data.changeState(State.Connecting)
             runOnMainDispatcher {
                 try {

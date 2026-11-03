@@ -39,6 +39,10 @@ public final class DnsChainConfig {
     public String testDomain = "example.com";
     public int logLevel = LEVEL_INFO;
 
+    /** Proxy login (SOCKS5 user/pass and HTTP Basic). Empty username = no authentication. */
+    public String username = "";
+    public String password = "";
+
     public List<String> dohServers = new ArrayList<String>();
     /** Enabled fragment rules in file order; the first matching rule is applied. */
     public List<FragmentRule> rules = new ArrayList<FragmentRule>();

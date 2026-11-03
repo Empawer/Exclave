@@ -321,9 +321,9 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
             // the preference persists after this listener returns; the service needs the value now
             DataStore.dnsChainEnabled = enabled
             if (enabled) {
-                DnsChainService.start(requireContext())
+                DnsChainService.onSwitchedOn(requireContext())
             } else {
-                DnsChainService.stop(requireContext())
+                DnsChainService.onSwitchedOff(requireContext())
             }
             true
         }

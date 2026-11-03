@@ -18,6 +18,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1009,6 +1010,70 @@ public final class DnsChainProxy {
         return new byte[]{0x05, (byte) code, 0x00, 0x01, 0, 0, 0, 0, 0, 0};
     }
 
+    private static final char[] B64STD =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".toCharArray();
+
+    static String base64Std(byte[] in) {
+        StringBuilder sb = new StringBuilder(((in.length + 2) / 3) * 4);
+        int i = 0;
+        while (i + 2 < in.length) {
+            int v = ((in[i] & 0xFF) << 16) | ((in[i + 1] & 0xFF) << 8) | (in[i + 2] & 0xFF);
+            sb.append(B64STD[(v >> 18) & 63]).append(B64STD[(v >> 12) & 63])
+                    .append(B64STD[(v >> 6) & 63]).append(B64STD[v & 63]);
+            i += 3;
+        }
+        int rem = in.length - i;
+        if (rem == 1) {
+            int v = (in[i] & 0xFF) << 16;
+            sb.append(B64STD[(v >> 18) & 63]).append(B64STD[(v >> 12) & 63]).append("==");
+        } else if (rem == 2) {
+            int v = ((in[i] & 0xFF) << 16) | ((in[i + 1] & 0xFF) << 8);
+            sb.append(B64STD[(v >> 18) & 63]).append(B64STD[(v >> 12) & 63])
+                    .append(B64STD[(v >> 6) & 63]).append('=');
+        }
+        return sb.toString();
+    }
+
+    private boolean authRequired() {
+        return cfg.username != null && !cfg.username.isEmpty();
+    }
+
+    /** constant-time comparison */
+    private static boolean sameBytes(byte[] a, byte[] b) {
+        return MessageDigest.isEqual(a, b);
+    }
+
+    /** RFC 1929 username/password sub-negotiation. Returns true when the login is correct. */
+    private boolean socks5Login(InputStream in, OutputStream out) throws IOException {
+        int ver = readByte(in);
+        byte[] user = readFully(in, readByte(in));
+        byte[] pass = readFully(in, readByte(in));
+        boolean okUser = sameBytes(user, cfg.username.getBytes(StandardCharsets.UTF_8));
+        boolean okPass = sameBytes(pass, (cfg.password == null ? "" : cfg.password).getBytes(StandardCharsets.UTF_8));
+        boolean ok = ver == 1 && okUser && okPass;
+        out.write(new byte[]{0x01, (byte) (ok ? 0x00 : 0x01)});
+        out.flush();
+        return ok;
+    }
+
+    /** Checks the Proxy-Authorization: Basic header of an HTTP CONNECT request. */
+    private boolean httpLoginOk(String headerBlock) {
+        String expected = "Basic " + base64Std((cfg.username + ":" + (cfg.password == null ? "" : cfg.password))
+                .getBytes(StandardCharsets.UTF_8));
+        String[] lines = headerBlock.split("\r\n");
+        for (int i = 1; i < lines.length; i++) {
+            int c = lines[i].indexOf(':');
+            if (c <= 0) continue;
+            if (!lines[i].substring(0, c).trim().equalsIgnoreCase("proxy-authorization")) continue;
+            String v = lines[i].substring(c + 1).trim();
+            if (v.length() > 6 && v.substring(0, 6).equalsIgnoreCase("basic ")) {
+                v = "Basic " + v.substring(6).trim();
+            }
+            return sameBytes(v.getBytes(StandardCharsets.ISO_8859_1), expected.getBytes(StandardCharsets.ISO_8859_1));
+        }
+        return false;
+    }
+
     /** Parses the client's first request; no success reply is sent here. Returns null to drop. */
     private Request readRequest(InputStream in, OutputStream out) throws IOException {
         int head = readByte(in);
@@ -1017,17 +1082,23 @@ public final class DnsChainProxy {
         if (head == 0x05) {
             int nmethods = readByte(in);
             byte[] methods = readFully(in, nmethods);
-            boolean noAuth = false;
+            boolean needAuth = authRequired();
+            int wanted = needAuth ? 0x02 : 0x00; // 0x02 = username/password
+            boolean offered = false;
             for (byte m : methods) {
-                if (m == 0) noAuth = true;
+                if (m == wanted) offered = true;
             }
-            if (!noAuth) {
+            if (!offered) {
                 out.write(new byte[]{0x05, (byte) 0xFF});
                 out.flush();
                 return null;
             }
-            out.write(new byte[]{0x05, 0x00});
+            out.write(new byte[]{0x05, (byte) wanted});
             out.flush();
+            if (needAuth && !socks5Login(in, out)) {
+                log(INFO, "SOCKS5 login failed");
+                return null;
+            }
 
             byte[] h = readFully(in, 4);
             int ver = h[0] & 0xFF, cmd = h[1] & 0xFF, atyp = h[3] & 0xFF;
@@ -1077,6 +1148,15 @@ public final class DnsChainProxy {
             String firstLine = all.split("\r\n", 2)[0];
             String[] parts = firstLine.split(" ");
             if (parts.length < 2 || !parts[0].toUpperCase(Locale.ROOT).equals("CONNECT")) return null;
+
+            if (authRequired() && !httpLoginOk(all)) {
+                log(INFO, "HTTP proxy login failed");
+                out.write(("HTTP/1.1 407 Proxy Authentication Required\r\n"
+                        + "Proxy-Authenticate: Basic realm=\"DNS Chain\"\r\n"
+                        + "Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                out.flush();
+                return null;
+            }
 
             String target = parts[1];
             String host;
