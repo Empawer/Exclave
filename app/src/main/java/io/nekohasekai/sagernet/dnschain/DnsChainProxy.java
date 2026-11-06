@@ -872,17 +872,16 @@ public final class DnsChainProxy {
             if (!ruleMatches(rule, packetNum, data)) continue;
 
             if (rule.splitSni) {
+                // SNI mode: the only thing done is one cut in the middle of the host name;
+                // if there is no SNI the data goes out untouched
                 int[] sni = findSni(data);
-                if (sni != null) {
-                    int cut = sni[0] + Math.max(1, sni[1] / 2);
-                    byte[][] chunks = new byte[][]{
-                            Arrays.copyOfRange(data, 0, cut),
-                            Arrays.copyOfRange(data, cut, data.length)
-                    };
-                    sendChunks(out, chunks, rule.delay);
-                    return true;
-                }
-                // SNI not found -> fall back to lengths
+                if (sni == null) return false;
+                int cut = sni[0] + Math.max(1, sni[1] / 2);
+                sendChunks(out, new byte[][]{
+                        Arrays.copyOfRange(data, 0, cut),
+                        Arrays.copyOfRange(data, cut, data.length)
+                }, rule.delay);
+                return true;
             }
             fragmentDataLens(out, data, rule.lengths, rule.delay, rule.maxSplit);
             return true;

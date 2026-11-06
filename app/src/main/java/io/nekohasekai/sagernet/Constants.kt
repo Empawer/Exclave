@@ -123,6 +123,7 @@ object Key {
     const val FRAGMENT_METHOD = "fragmentMethod"
     const val DNS_CHAIN_ENABLED = "dnsChainEnabled"
     const val DNS_CHAIN_DOH = "dnsChainDoh"
+    const val DNS_CHAIN_FRAGMENT = "dnsChainFragment"
     const val DNS_CHAIN_USER = "dnsChainUser"
     const val DNS_CHAIN_PASS = "dnsChainPass"
     const val DNS_CHAIN_AUTO_CLOSE = "dnsChainAutoClose"

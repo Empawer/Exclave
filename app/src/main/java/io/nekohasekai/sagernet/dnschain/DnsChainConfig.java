@@ -13,14 +13,23 @@ import java.util.regex.Pattern;
 
 /**
  * Configuration of the DNS Chain proxy (SOCKS5 / HTTP CONNECT + DNS-over-HTTPS + TLS fragmentation).
- * Everything comes from setting.ini (bundled as an Android asset), same format as the Python original.
+ * Everything comes from dns_chain.ini (bundled as an Android asset), same format as the Python original.
  *
  * Pure Java, no Android dependency.
  */
 public final class DnsChainConfig {
 
-    /** Name of the bundled file (app/src/main/assets/setting.ini). */
-    public static final String INI_ASSET = "setting.ini";
+    /** Name of the bundled file (app/src/main/assets/dns_chain.ini). */
+    public static final String INI_ASSET = "dns_chain.ini";
+
+    /** Fragment box content when dns_chain.ini has no fragment section at all. */
+    public static final String DEFAULT_FRAGMENT_TEXT =
+            "packets = tlshello\n"
+                    + "lengths = 0,10,1\n"
+                    + "delay = 0 ms\n"
+                    + "maxSplit = 10\n"
+                    + "splitSNI = 0\n"
+                    + "Enable = 1";
 
     public static final int LEVEL_DEBUG = 0;
     public static final int LEVEL_INFO = 1;
@@ -46,6 +55,8 @@ public final class DnsChainConfig {
     public List<String> dohServers = new ArrayList<String>();
     /** Enabled fragment rules in file order; the first matching rule is applied. */
     public List<FragmentRule> rules = new ArrayList<FragmentRule>();
+    /** The ini's first enabled fragment section as editable text (used to pre-fill the app's box). */
+    public String fragmentText = DEFAULT_FRAGMENT_TEXT;
     /** Non-fatal problems found while reading the ini (skipped lines / sections). */
     public final List<String> warnings = new ArrayList<String>();
 
@@ -67,6 +78,10 @@ public final class DnsChainConfig {
         /** seconds */
         public final double delay;
         public final int maxSplit;
+        /**
+         * false = fragment by lengths/maxSplit (default).
+         * true  = only cut the ClientHello in the middle of the SNI host name; lengths/maxSplit are not used.
+         */
         public final boolean splitSni;
 
         FragmentRule(String name, boolean tlsHello, int start, int end, List<int[]> lengths,
@@ -109,7 +124,7 @@ public final class DnsChainConfig {
             if (t.isEmpty() || t.charAt(0) == ';' || t.charAt(0) == '#') continue;
             if (t.charAt(0) == '[') {
                 int e = t.indexOf(']');
-                if (e < 0) throw new ConfigException("setting.ini line " + (i + 1) + ": missing ']'");
+                if (e < 0) throw new ConfigException("dns_chain.ini line " + (i + 1) + ": missing ']'");
                 String name = t.substring(1, e).trim();
                 current = sections.get(name);
                 if (current == null) {
@@ -119,7 +134,7 @@ public final class DnsChainConfig {
                 continue;
             }
             if (current == null) {
-                throw new ConfigException("setting.ini line " + (i + 1) + ": setting outside of a [section]");
+                throw new ConfigException("dns_chain.ini line " + (i + 1) + ": setting outside of a [section]");
             }
             int eq = -1;
             for (int k = 0; k < t.length(); k++) {
@@ -130,7 +145,7 @@ public final class DnsChainConfig {
                 }
             }
             if (eq <= 0) {
-                throw new ConfigException("setting.ini line " + (i + 1) + ": expected 'key = value'  (" + t + ")");
+                throw new ConfigException("dns_chain.ini line " + (i + 1) + ": expected 'key = value'  (" + t + ")");
             }
             String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
             String value = stripInlineComment(t.substring(eq + 1).trim());
@@ -150,7 +165,7 @@ public final class DnsChainConfig {
         try {
             return Integer.parseInt(v.trim());
         } catch (NumberFormatException e) {
-            throw new ConfigException("setting.ini " + where + ": '" + key + "' must be a whole number (got '" + v + "')");
+            throw new ConfigException("dns_chain.ini " + where + ": '" + key + "' must be a whole number (got '" + v + "')");
         }
     }
 
@@ -161,15 +176,15 @@ public final class DnsChainConfig {
         try {
             d = Double.parseDouble(v.trim());
         } catch (NumberFormatException e) {
-            throw new ConfigException("setting.ini " + where + ": '" + key + "' must be a number (got '" + v + "')");
+            throw new ConfigException("dns_chain.ini " + where + ": '" + key + "' must be a number (got '" + v + "')");
         }
         if (Double.isNaN(d) || Double.isInfinite(d)) {
-            throw new ConfigException("setting.ini " + where + ": '" + key + "' must be a number (got '" + v + "')");
+            throw new ConfigException("dns_chain.ini " + where + ": '" + key + "' must be a number (got '" + v + "')");
         }
         return d;
     }
 
-    /** Parses the complete setting.ini text. */
+    /** Parses the complete dns_chain.ini text. */
     public static DnsChainConfig fromIni(String text) throws ConfigException {
         LinkedHashMap<String, LinkedHashMap<String, String>> sections = parseIni(text);
 
@@ -177,7 +192,7 @@ public final class DnsChainConfig {
         for (Map.Entry<String, LinkedHashMap<String, String>> e : sections.entrySet()) {
             if (e.getKey().equalsIgnoreCase("proxy")) proxy = e.getValue();
         }
-        if (proxy == null) throw new ConfigException("setting.ini: [proxy] section is missing");
+        if (proxy == null) throw new ConfigException("dns_chain.ini: [proxy] section is missing");
 
         DnsChainConfig c = new DnsChainConfig();
         String where = "[proxy]";
@@ -185,7 +200,7 @@ public final class DnsChainConfig {
         if (c.listenIp.isEmpty()) c.listenIp = "127.0.0.1";
         c.listenPort = getInt(proxy, "listen_port", 40443, where);
         if (c.listenPort < 1 || c.listenPort > 65535) {
-            throw new ConfigException("setting.ini [proxy]: listen_port must be between 1 and 65535");
+            throw new ConfigException("dns_chain.ini [proxy]: listen_port must be between 1 and 65535");
         }
         c.idleTimeout = getInt(proxy, "idle_timeout", 300, where);
         if (c.idleTimeout < 0) c.idleTimeout = 0;
@@ -195,7 +210,7 @@ public final class DnsChainConfig {
         c.dohCooldown = getDouble(proxy, "doh_cooldown", 30, where);
         c.systemDnsTimeout = getDouble(proxy, "system_dns_timeout", 5, where);
         if (c.connectTimeout <= 0 || c.handshakeTimeout <= 0 || c.dohTimeout <= 0 || c.systemDnsTimeout <= 0) {
-            throw new ConfigException("setting.ini [proxy]: timeouts must be greater than 0");
+            throw new ConfigException("dns_chain.ini [proxy]: timeouts must be greater than 0");
         }
         if (c.dohCooldown < 0) c.dohCooldown = 0;
 
@@ -248,6 +263,7 @@ public final class DnsChainConfig {
         }
 
         // fragment rules: every other section whose name contains "fragment"
+        String firstText = null, enabledText = null;
         for (Map.Entry<String, LinkedHashMap<String, String>> e : sections.entrySet()) {
             String name = e.getKey();
             if (name.equalsIgnoreCase("proxy")) continue;
@@ -256,14 +272,76 @@ public final class DnsChainConfig {
                 continue;
             }
             Map<String, String> sec = e.getValue();
+            String text1 = renderSection(sec);
+            if (firstText == null) firstText = text1;
             if (!get(sec, "enable", "0").trim().equals("1")) continue;
+            if (enabledText == null) enabledText = text1;
             try {
                 c.rules.add(buildRule(name, sec));
             } catch (ConfigException ex) {
                 c.warnings.add("Section [" + name + "] skipped, invalid config: " + ex.getMessage());
             }
         }
+        if (enabledText != null) c.fragmentText = enabledText;
+        else if (firstText != null) c.fragmentText = firstText;
         return c;
+    }
+
+    /** packets / lengths / delay / maxSplit / Enable of one ini section as editable text. */
+    private static String renderSection(Map<String, String> sec) {
+        StringBuilder sb = new StringBuilder();
+        String[][] keys = {{"packets", "packets"}, {"lengths", "lengths"}, {"delay", "delay"}, {"maxsplit", "maxSplit"}};
+        for (String[] k : keys) {
+            String v = sec.get(k[0]);
+            if (v != null) sb.append(k[1]).append(" = ").append(v).append('\n');
+        }
+        sb.append("splitSNI = ").append(get(sec, "splitsni", "0").trim()).append('\n');
+        sb.append("Enable = ").append(get(sec, "enable", "0").trim());
+        return sb.toString();
+    }
+
+    /**
+     * The fragment box of the app:
+     * <pre>
+     * packets = tlshello
+     * lengths = 0,10,1
+     * delay = 0 ms
+     * maxSplit = 10
+     * splitSNI = 0
+     * Enable = 1
+     * </pre>
+     * Returns null when fragmentation is off (empty box or Enable = 0). A missing Enable line means on.
+     * Replaces every fragment section of the ini.
+     */
+    public static FragmentRule parseFragmentText(String text) throws ConfigException {
+        if (text == null || text.trim().isEmpty()) return null;
+        Map<String, String> sec = new LinkedHashMap<String, String>();
+        String[] lines = text.split("\r\n|\n|\r");
+        for (int i = 0; i < lines.length; i++) {
+            String t = lines[i].trim();
+            if (t.isEmpty() || t.charAt(0) == ';' || t.charAt(0) == '#') continue;
+            if (t.charAt(0) == '[' && t.charAt(t.length() - 1) == ']') continue; // pasted [section] header
+            int eq = -1;
+            for (int k = 0; k < t.length(); k++) {
+                char ch = t.charAt(k);
+                if (ch == '=' || ch == ':') {
+                    eq = k;
+                    break;
+                }
+            }
+            if (eq <= 0) throw new ConfigException("Fragment line " + (i + 1) + ": expected 'key = value'  (" + t + ")");
+            String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
+            String value = stripInlineComment(t.substring(eq + 1).trim());
+            if (!(key.equals("packets") || key.equals("lengths") || key.equals("delay")
+                    || key.equals("maxsplit") || key.equals("splitsni") || key.equals("enable"))) {
+                throw new ConfigException("Fragment line " + (i + 1) + ": unknown key '" + t.substring(0, eq).trim()
+                        + "' (use packets, lengths, delay, maxSplit, splitSNI, Enable)");
+            }
+            sec.put(key, value);
+        }
+        String enable = sec.get("enable");
+        if (enable != null && !parseBool(enable, "Enable")) return null;
+        return buildRule("custom fragment", sec);
     }
 
     // ------------------------------------------------------------------
@@ -272,7 +350,7 @@ public final class DnsChainConfig {
 
     /**
      * One DoH URL per line. Empty lines and lines starting with # or ; are ignored.
-     * "DOH_01 = https://..." (setting.ini style) is accepted too.
+     * "DOH_01 = https://..." (dns_chain.ini style) is accepted too.
      */
     public static List<String> parseDohText(String text) throws ConfigException {
         List<String> out = new ArrayList<String>();
@@ -374,8 +452,7 @@ public final class DnsChainConfig {
     }
 
     /**
-     * packets and lengths are required. Missing delay / maxSplit / splitSNI behave like the
-     * Python original (0 ms / unlimited / 0).
+     * packets and lengths are required. Missing delay / maxSplit / splitSNI mean 0 ms / unlimited / 0.
      */
     static FragmentRule buildRule(String name, Map<String, String> sec) throws ConfigException {
         String packets = get(sec, "packets", null);

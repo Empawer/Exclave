@@ -637,7 +637,7 @@
     <string name="dns_chain_sum">Local SOCKS5 proxy with DNS over HTTPS and TLS fragmentation. It opens when you start a profile. Tap to configure.</string>
     <string name="dns_chain_description">A local SOCKS5 proxy (HTTP CONNECT also works) that resolves domains through DNS over HTTPS and fragments the TLS Client Hello. Connect to it with a SOCKS proxy at %1$s using the login below. It opens when you start a profile and closes 60 seconds after you stop it; starting another profile within that time reuses it.</string>
     <string name="dns_chain_doh_hint">DoH servers (one link per line)</string>
-    <string name="dns_chain_doh_help">Paste as many DNS over HTTPS links as you like. All of them are asked at once and the first answer wins. Leave empty to use the system DNS. Fragment settings are read from setting.ini inside the app.</string>
+    <string name="dns_chain_doh_help">Paste as many DNS over HTTPS links as you like. All of them are asked at once and the first answer wins. Leave empty to use the system DNS. Ports and timeouts are read from dns_chain.ini inside the app.</string>
     <string name="dns_chain_save">Save</string>
     <string name="dns_chain_reset">Reset to default</string>
     <string name="dns_chain_saved">Saved</string>
@@ -653,4 +653,12 @@
     <string name="dns_chain_idle_hint">Seconds to keep it open</string>
     <string name="dns_chain_idle_help">Used when the switch above is on. Starting a profile within this time reuses the open port. If the switch is off, the port stays open until you turn DNS Chain off in Settings.</string>
     <string name="dns_chain_idle_invalid">Seconds must be a whole number from 1 to %1$d.</string>
+    <string name="dns_chain_fragment_hint">Fragment settings</string>
+    <string name="dns_chain_fragment_help">packets: tlshello, or a packet range such as 1-3
+lengths: bytes per piece, such as 0,10,1 or 10-20 (0 = send nothing but count one split)
+delay: pause between pieces, such as 0 ms
+maxSplit: 0 = unlimited; N = cut N pieces and send the rest untouched
+splitSNI: 0 = fragment by lengths (default); 1 = fragmentation off, only cut the domain name (SNI) in the middle
+Enable: 1 = on, 0 = off
+An empty box also turns fragmentation off.</string>
 </resources>

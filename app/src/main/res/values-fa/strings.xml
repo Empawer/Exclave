@@ -592,7 +592,7 @@
     <string name="dns_chain_sum">پروکسی محلی SOCKS5 با DNS روی HTTPS و قطعه‌قطعه‌سازی TLS. با شروع پروفایل باز می‌شود. برای تنظیم لمس کنید.</string>
     <string name="dns_chain_description">یک پروکسی محلی SOCKS5 (HTTP CONNECT هم کار می‌کند) که دامنه‌ها را با DNS روی HTTPS حل می‌کند و Client Hello مربوط به TLS را قطعه‌قطعه می‌کند. با یک پروکسی SOCKS به آدرس %1$s و با نام کاربری و رمز زیر به آن وصل شوید. با شروع پروفایل باز می‌شود و ۶۰ ثانیه بعد از توقف بسته می‌شود؛ اگر در همین مدت پروفایل دیگری را شروع کنید از همان استفاده می‌شود.</string>
     <string name="dns_chain_doh_hint">سرورهای DoH (هر لینک در یک خط)</string>
-    <string name="dns_chain_doh_help">هر تعداد لینک DNS روی HTTPS که می‌خواهید جای‌گذاری کنید. درخواست همزمان به همه می‌رود و اولین پاسخ استفاده می‌شود. اگر خالی بماند DNS سیستم استفاده می‌شود. تنظیمات فرگمنت از فایل setting.ini داخل برنامه خوانده می‌شود.</string>
+    <string name="dns_chain_doh_help">هر تعداد لینک DNS روی HTTPS که می‌خواهید جای‌گذاری کنید. درخواست همزمان به همه می‌رود و اولین پاسخ استفاده می‌شود. اگر خالی بماند DNS سیستم استفاده می‌شود. پورت و تایم‌اوت‌ها از فایل dns_chain.ini داخل برنامه خوانده می‌شود.</string>
     <string name="dns_chain_save">ذخیره</string>
     <string name="dns_chain_reset">بازگشت به پیش‌فرض</string>
     <string name="dns_chain_saved">ذخیره شد</string>
@@ -608,4 +608,12 @@
     <string name="dns_chain_idle_hint">چند ثانیه باز بماند</string>
     <string name="dns_chain_idle_help">وقتی کلید بالا روشن است اعمال می‌شود. اگر در همین مدت پروفایلی را شروع کنید از همان پورت باز استفاده می‌شود. اگر کلید خاموش باشد، پورت تا وقتی DNS Chain را از تنظیمات خاموش نکنید باز می‌ماند.</string>
     <string name="dns_chain_idle_invalid">تعداد ثانیه باید یک عدد صحیح بین ۱ تا %1$d باشد.</string>
+    <string name="dns_chain_fragment_hint">تنظیمات فرگمنت</string>
+    <string name="dns_chain_fragment_help">packets: ‏tlshello یا بازه‌ی پکت مثل 1-3
+lengths: تعداد بایت هر تکه مثل 0,10,1 یا 10-20 (عدد 0 = چیزی نفرست ولی یک split بشمار)
+delay: مکث بین تکه‌ها مثل 0 ms
+maxSplit: ‏0 = بدون محدودیت؛ N = فقط N تکه ببُر و بقیه را دست‌نخورده بفرست
+splitSNI: ‏0 = فرگمنت با lengths (پیش‌فرض)؛ 1 = فرگمنت خاموش و فقط نام دامنه (SNI) از وسط بریده می‌شود
+Enable: ‏1 = روشن، 0 = خاموش
+کادر خالی هم یعنی بدون فرگمنت.</string>
 </resources>

@@ -71,6 +71,37 @@
                 android:textColor="?android:attr/textColorSecondary" />
 
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/fragment_layout"
+                style="?attr/textInputOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:hint="@string/dns_chain_fragment_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/fragment_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top|start"
+                    android:importantForAutofill="no"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:minLines="5"
+                    android:scrollbars="vertical"
+                    android:textDirection="ltr"
+                    android:textSize="13sp"
+                    android:typeface="monospace" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:id="@+id/fragment_help"
+                style="?android:attr/textAppearanceSmall"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/dns_chain_fragment_help"
+                android:textColor="?android:attr/textColorSecondary" />
+
+            <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/user_layout"
                 style="?attr/textInputOutlinedStyle"
                 android:layout_width="match_parent"

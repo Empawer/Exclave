@@ -67,6 +67,7 @@ class DnsChainActivity : ThemedActivity() {
 
         if (savedInstanceState == null) {
             binding.dohInput.setText(DnsChainSettings.dohText(ini))
+            binding.fragmentInput.setText(DnsChainSettings.fragmentText(ini))
             binding.userInput.setText(DataStore.dnsChainUser)
             binding.passInput.setText(DataStore.dnsChainPass)
             binding.autoCloseSwitch.isChecked = DataStore.dnsChainAutoClose
@@ -79,8 +80,9 @@ class DnsChainActivity : ThemedActivity() {
 
         binding.dnsChainSave.setOnClickListener { save() }
         binding.dnsChainReset.setOnClickListener {
-            // back to the DoH list written in setting.ini and the default login
+            // back to the values written in dns_chain.ini and the default login
             binding.dohInput.setText(ini?.dohServers?.joinToString("\n").orEmpty())
+            binding.fragmentInput.setText(ini?.fragmentText ?: DnsChainConfig.DEFAULT_FRAGMENT_TEXT)
             binding.userInput.setText("admin")
             binding.passInput.setText("admin")
             binding.autoCloseSwitch.isChecked = true
@@ -131,6 +133,7 @@ class DnsChainActivity : ThemedActivity() {
 
     private fun save() {
         val doh = binding.dohInput.text?.toString().orEmpty().trim()
+        val fragment = binding.fragmentInput.text?.toString().orEmpty().trim()
         val user = binding.userInput.text?.toString().orEmpty()
         val pass = binding.passInput.text?.toString().orEmpty()
         val autoClose = binding.autoCloseSwitch.isChecked
@@ -140,6 +143,7 @@ class DnsChainActivity : ThemedActivity() {
         // validate before saving so a typo can never break the running proxy
         try {
             DnsChainConfig.parseDohText(doh)
+            DnsChainConfig.parseFragmentText(fragment)
         } catch (e: DnsChainConfig.ConfigException) {
             showError(e.message)
             return
@@ -155,7 +159,8 @@ class DnsChainActivity : ThemedActivity() {
             return
         }
 
-        DnsChainSettings.saveDoh(doh)
+        DnsChainSettings.saveDoh(doh, ini)
+        DnsChainSettings.saveFragment(fragment, ini)
         DnsChainSettings.saveLogin(user, pass)
         DataStore.dnsChainAutoClose = autoClose
         if (idleSeconds != null && idleSeconds in 1..DnsChainSettings.MAX_IDLE_SECONDS) {
